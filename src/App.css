@@ -1,0 +1,409 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #140c02;
+  --surface: rgba(255,255,255,0.05);
+  --border: rgba(255,255,255,0.1);
+  --text: rgba(255,255,255,0.92);
+  --text-dim: rgba(255,255,255,0.38);
+  --accent: #5B9CF6;
+  --glass: rgba(210,235,255,0.07);
+  --glass-border: rgba(210,235,255,0.16);
+  --done-glass: rgba(107,203,119,0.07);
+  --done-border: rgba(107,203,119,0.2);
+  --radius-jar: 6px 6px 26px 26px;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── App shell ────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 28px 18px 10px;
+  gap: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── Header ───────────────────────────────── */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+}
+
+.date {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.streak-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.streak-num {
+  font-size: 17px;
+  font-weight: 700;
+  color: #FF8C42;
+  line-height: 1;
+}
+
+.streak-txt {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+
+/* ── Banner ───────────────────────────────── */
+.banner {
+  background: linear-gradient(135deg, #1db954 0%, #14a346 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  padding: 9px 16px;
+  border-radius: 10px;
+  animation: slideDown 0.3s ease;
+  flex-shrink: 0;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Jars row ─────────────────────────────── */
+.jars-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.jar-arrow {
+  display: flex;
+  align-items: center;
+  padding-top: 40px;
+  flex-shrink: 0;
+}
+
+/* ── Jar ──────────────────────────────────── */
+.jar-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.jar-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Fixed dimensions must match JAR_W × JAR_H in PhysicsJar.jsx */
+.jar {
+  /* width/height come from inline style in PhysicsJar (236×420) */
+  border-radius: var(--radius-jar);
+  border: 1.5px solid var(--glass-border);
+  background: var(--glass);
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 60px rgba(255,255,255,0.015),
+    inset 2px 0 10px rgba(255,255,255,0.03),
+    0 8px 32px rgba(0,0,0,0.4);
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.jar-done {
+  background: var(--done-glass);
+  border-color: var(--done-border);
+}
+
+.jar-sheen {
+  position: absolute;
+  top: 0; left: 5%;
+  width: 14%; height: 100%;
+  background: linear-gradient(90deg, rgba(255,255,255,0.045), transparent);
+  pointer-events: none;
+  border-radius: 4px;
+}
+
+.jar-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: italic;
+  pointer-events: none;
+}
+
+.jar-sublabel {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ── Physics clip button ──────────────────── */
+.clip-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  -webkit-app-region: no-drag;
+  /* No CSS transition on transform — physics drives it via direct DOM writes */
+}
+
+.clip-btn:active { cursor: grabbing; }
+
+/* Physics clips: glow on hover (physics controls position so no transform change) */
+.clip-physics:hover {
+  filter: brightness(1.6) drop-shadow(0 0 7px var(--col)) !important;
+}
+
+.clip-physics:active {
+  opacity: 0.7;
+}
+
+/* ── Drag ghost clip ──────────────────────── */
+.clip-ghost {
+  position: fixed;
+  transform: translate(-8px, -16px);
+  pointer-events: none;
+  z-index: 9999;
+  filter: drop-shadow(0 6px 14px rgba(0,0,0,0.6)) brightness(1.3);
+  animation: ghostAppear 0.1s ease;
+}
+
+@keyframes ghostAppear {
+  from { opacity: 0; transform: translate(-8px, -16px) scale(0.8); }
+  to   { opacity: 1; transform: translate(-8px, -16px) scale(1); }
+}
+
+/* ── Counters ─────────────────────────────── */
+.counters {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.counter-n {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.counter-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.counter-sep {
+  width: 1px;
+  height: 32px;
+  background: var(--border);
+}
+
+/* ── Settings toggle ──────────────────────── */
+.settings-btn {
+  align-self: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 5px 18px;
+  border-radius: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.settings-btn:hover {
+  color: var(--text);
+  border-color: rgba(255,255,255,0.28);
+  background: rgba(255,255,255,0.1);
+}
+
+/* ── Settings panel ───────────────────────── */
+.settings {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
+  animation: slideDown 0.2s ease;
+}
+
+.settings-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-dim);
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.setting-label {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* Toggle switch */
+.toggle {
+  width: 38px; height: 22px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+
+.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.toggle.on .toggle-thumb { transform: translateX(16px); }
+
+/* Color input */
+.color-input {
+  width: 34px; height: 26px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  -webkit-app-region: no-drag;
+}
+
+/* Color presets */
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preset {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.preset:hover { transform: scale(1.25); }
+
+/* Number input */
+.num-input {
+  width: 62px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 7px;
+  padding: 3px 8px;
+  font-size: 13px;
+  text-align: right;
+  -webkit-app-region: no-drag;
+}
+
+.num-input:focus { outline: none; border-color: var(--accent); }
+
+/* Settings action buttons */
+.settings-actions {
+  display: flex;
+  gap: 7px;
+}
+
+.btn-primary, .btn-secondary, .btn-danger {
+  flex: 1;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  -webkit-app-region: no-drag;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+}
+.btn-primary:hover { background: #4a8ae5; }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.07);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: rgba(255,255,255,0.13); }
+
+.btn-danger {
+  background: rgba(255,80,80,0.12);
+  color: #ff7070;
+  border: 1px solid rgba(255,80,80,0.25);
+}
+.btn-danger:hover { background: rgba(255,80,80,0.22); }
