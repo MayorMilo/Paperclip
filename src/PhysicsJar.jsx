@@ -6,10 +6,10 @@ const { Engine, World, Bodies, Body, Composite, Sleeping } = Matter
 export const JAR_W = 220
 export const JAR_H = 280
 
-// Physics body only slightly larger than the visual (12×28) — gives minimal
-// forced spacing while still preventing full overlap
-const CW  = 16    // physics width  (visual SVG is 12)
-const CH  = 32    // physics height (visual SVG is 28)
+// Physics body matches the visual closely — narrow wire-like shape with
+// chamfered corners to approximate the rounded wire profile
+const CW  = 14    // physics width  (visual SVG is 12)
+const CH  = 30    // physics height (visual SVG is 28)
 const PAD = 4     // extra click-target padding around the button
 
 const WALL           = 50
@@ -91,7 +91,7 @@ export function PhysicsJar({
   // ── Engine init ──────────────────────────────────────────────────────────
   useEffect(() => {
     const engine = Engine.create({
-      gravity:        { x: 0, y: 4 },
+      gravity:        { x: 0, y: 2.5 },
       enableSleeping: true,
     })
     engineRef.current = engine
@@ -152,12 +152,13 @@ export function PhysicsJar({
           dropPos ? dropPos.y : -(CH / 2 + Math.random() * 40),
           CW, CH,
           {
-            friction:       0.55,
-            frictionAir:    0.045,
-            restitution:    0.1,
-            density:        0.006,
+            friction:       0.6,
+            frictionAir:    0.10,
+            restitution:    0.08,
+            density:        0.007,
             angle:          (Math.random() - 0.5) * Math.PI,
-            sleepThreshold: 20,
+            sleepThreshold: 30,
+            chamfer:        { radius: 6 },
           }
         )
         body.clipId = clip.id
@@ -201,9 +202,9 @@ export function PhysicsJar({
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
 
-    const RADIUS    = 32  // px — push field radius
-    const MAX_KICK  = 2   // px/tick added per event
-    const MAX_SPEED = 5   // hard cap so clips can't fly off
+    const RADIUS    = 44  // px — push field radius
+    const MAX_KICK  = 3   // px/tick added per event
+    const MAX_SPEED = 6   // hard cap so clips can't fly off
 
     const all     = Composite.allBodies(engine.world)
     const dynamic = all.filter(b => b.clipId !== undefined && !b.isStatic)
