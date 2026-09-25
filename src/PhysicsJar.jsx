@@ -50,6 +50,23 @@ export function PhysicsJar({
       const all       = Composite.allBodies(engineRef.current.world)
       const dynamic   = all.filter(b => b.clipId !== undefined && !b.isStatic)
 
+      // ── Global velocity cap — clamps physics-engine impulses (e.g. from
+      //    body removal or collision cascades), not just jostle kicks ────
+      const MAX_BODY_SPEED = 12
+      const MAX_SPIN       = 0.25  // rad/tick
+      for (const b of dynamic) {
+        const speed = Math.hypot(b.velocity.x, b.velocity.y)
+        if (speed > MAX_BODY_SPEED) {
+          Body.setVelocity(b, {
+            x: (b.velocity.x / speed) * MAX_BODY_SPEED,
+            y: (b.velocity.y / speed) * MAX_BODY_SPEED,
+          })
+        }
+        if (Math.abs(b.angularVelocity) > MAX_SPIN) {
+          Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * MAX_SPIN)
+        }
+      }
+
       // ── Position / rotation (every frame, direct DOM write) ──────────
       for (const b of dynamic) {
         const el = clipRefs.current[b.clipId]
