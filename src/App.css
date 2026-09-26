@@ -122,6 +122,29 @@ body {
   color: var(--text-dim);
 }
 
+.jar-label-text {
+  cursor: text;
+}
+.jar-label-text:hover {
+  color: var(--text);
+}
+
+.jar-label-input {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  width: 80px;
+  text-align: center;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+
 /* Fixed dimensions must match JAR_W × JAR_H in PhysicsJar.jsx */
 .jar {
   /* width/height come from inline style in PhysicsJar (236×420) */
@@ -177,6 +200,7 @@ body {
   align-items: center;
   justify-content: center;
   transform-origin: center center;
+  will-change: transform;
   -webkit-app-region: no-drag;
   /* No CSS transition on transform — physics drives it via direct DOM writes */
 }
@@ -186,6 +210,11 @@ body {
 /* Physics clips: glow on hover (physics controls position so no transform change) */
 .clip-physics:hover {
   filter: brightness(1.6) drop-shadow(0 0 7px var(--col)) !important;
+}
+
+.clip-shadow {
+  transform: translate(var(--sx, 0px), var(--sy, 1px));
+  opacity: var(--sa, 0.22);
 }
 
 .clip-physics:active {

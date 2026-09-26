@@ -8,6 +8,7 @@ const PALETTE = [
 ]
 
 const STORAGE_KEY = 'paperclips-v1'
+const TITLES_KEY  = 'paperclips-titles-v1'
 
 function todayStr() {
   return new Date().toLocaleDateString('en-CA')
@@ -69,6 +70,18 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false)
   const [flash, setFlash] = useState(null)
+
+  const [jarTitles, setJarTitles] = useState(() => {
+    try {
+      const raw = localStorage.getItem(TITLES_KEY)
+      if (raw) return JSON.parse(raw)
+    } catch {}
+    return { left: 'To Send', right: 'Done' }
+  })
+
+  useEffect(() => {
+    localStorage.setItem(TITLES_KEY, JSON.stringify(jarTitles))
+  }, [jarTitles])
 
   // ── Drag state ───────────────────────────────────────────────────────────
   // dragRef holds stable info that doesn't need re-renders; ghostPos does
@@ -138,6 +151,13 @@ export default function App() {
             }
           }
           moveClip(drag.clipId, drag.fromJar)
+        } else if (toJar === drag.fromJar && jarEl) {
+          // Same-jar drop: record cursor position so clip falls from where it was released
+          const rect = jarEl.getBoundingClientRect()
+          dropPosRef.current[drag.clipId] = {
+            x: Math.max(10, Math.min(JAR_W - 10, e.clientX - rect.left)),
+            y: Math.max(16, Math.min(JAR_H - 16, e.clientY - rect.top)),
+          }
         }
       }
       dragRef.current = null
@@ -206,7 +226,8 @@ export default function App() {
 
       <div className="jars-row">
         <PhysicsJar
-          label="To Send"
+          label={jarTitles.left}
+          onLabelChange={name => setJarTitles(t => ({ ...t, left: name }))}
           sublabel={`${leftClips.length} clips`}
           clips={leftClips}
           emptyLabel="All sent!"
@@ -220,7 +241,8 @@ export default function App() {
         />
         <ArrowIcon />
         <PhysicsJar
-          label="Done"
+          label={jarTitles.right}
+          onLabelChange={name => setJarTitles(t => ({ ...t, right: name }))}
           sublabel={`${rightClips.length} clips`}
           clips={rightClips}
           emptyLabel="None yet..."
