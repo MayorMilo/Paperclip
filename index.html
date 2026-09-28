@@ -4,6 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PaperClips</title>
+    <script>
+      // Theme before first paint (no dark→light flash); must match THEME_KEY in App.jsx
+      (function () {
+        var t = null
+        try { t = localStorage.getItem('paperclips-theme-v1') } catch (e) {}
+        if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+        document.documentElement.dataset.theme = t
+        if (/[?&]panel=1/.test(location.search)) document.documentElement.classList.add('is-panel')
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -18,7 +18,6 @@ const DRAG_THRESHOLD = 8
 // Physics bounds match the jar's inner (padding) box: 1.5px CSS border each side,
 // 26px outer bottom corner radius in App.css
 const INNER_W  = JAR_W - 3
-const INNER_H  = JAR_H - 3
 const CORNER_R = 24.5
 
 const STEP           = 1000 / 60  // fixed physics step (ms); velocity constants are tuned per step
@@ -34,6 +33,59 @@ function landClip(b) {
   b.frictionAir = AIR
 }
 
+// Per-step limits: velocity cap (clamps collision impulses, e.g. from body
+// removal, not just jostle kicks) and the free-fall landing fallback
+function limitBody(b) {
+  if (b.introFall && ++b.introAge > 20 && b.speed < 1) landClip(b)
+  const cap   = b.introFall ? INTRO_SPEED : MAX_BODY_SPEED
+  const speed = Math.hypot(b.velocity.x, b.velocity.y)
+  if (speed > cap) {
+    Body.setVelocity(b, { x: (b.velocity.x / speed) * cap, y: (b.velocity.y / speed) * cap })
+  }
+  if (Math.abs(b.angularVelocity) > MAX_SPIN) {
+    Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * MAX_SPIN)
+  }
+}
+
+function makeClipBody(clip, dropPos, intro) {
+  const body = Bodies.rectangle(
+    dropPos ? dropPos.x : 15 + Math.random() * (INNER_W - 30),
+    dropPos ? dropPos.y : -(CH / 2 + 4 + Math.random() * 40),
+    CW, CH,
+    {
+      friction:       0.6,
+      frictionAir:    intro ? INTRO_AIR : AIR,
+      restitution:    0.08,
+      density:        0.007,
+      angle:          (Math.random() - 0.5) * Math.PI,
+      sleepThreshold: 30,
+      chamfer:        { radius: 6 },
+    }
+  )
+  body.clipId    = clip.id
+  body.introFall = intro
+  body.introAge  = 0
+  Body.setVelocity(body, {
+    x: (Math.random() - 0.5) * (intro ? 1 : 2),
+    y: intro ? 1.5 : dropPos ? 0.5 : 0,
+  })
+  return body
+}
+
+// Run the pour to rest synchronously (≈100ms of CPU for 50 clips) so a view
+// that opens later shows a settled pile instead of replaying the drop
+function presettle(engine, bodies) {
+  const queue = bodies.slice()
+  for (let step = 0; step < 420; step++) {
+    if (queue.length && step % 2 === 0) Composite.add(engine.world, queue.shift())
+    Engine.update(engine, STEP)
+    for (const b of Composite.allBodies(engine.world)) {
+      if (b.clipId !== undefined && !b.isStatic) limitBody(b)
+    }
+    if (!queue.length && bodies.every(b => b.isSleeping)) break
+  }
+}
+
 // ─── PhysicsJar ──────────────────────────────────────────────────────────────
 export function PhysicsJar({
   clips, onMove, label, sublabel, isDone, hint, emptyLabel,
@@ -42,8 +94,12 @@ export function PhysicsJar({
   dropPosRef,        // ref: { [clipId]: {x,y} } — spawn at cursor on drop
   isGhostDragging,   // true while any ghost drag is in flight (suppress jostle)
   onLabelChange,     // (newLabel: string) → called when user renames the jar
+  height = JAR_H,    // jar height in px; fixed for the component's lifetime (remount to change)
+  presettled = false, // bulk loads appear already at rest (no pour animation)
 }) {
+  const innerH = height - 3
   const engineRef    = useRef(null)
+  const heightRef    = useRef(height)
   const bodiesRef    = useRef({})   // clipId → Matter.Body
   const clipRefs     = useRef({})   // clipId → <button> DOM node
   const rafRef       = useRef(null)
@@ -97,22 +153,7 @@ export function PhysicsJar({
         accRef.current -= STEP
         steps++
 
-        // Global velocity cap — clamps collision impulses (e.g. from body
-        // removal), not just jostle kicks
-        for (const b of dynamic) {
-          if (b.introFall && ++b.introAge > 20 && b.speed < 1) landClip(b)
-          const cap   = b.introFall ? INTRO_SPEED : MAX_BODY_SPEED
-          const speed = Math.hypot(b.velocity.x, b.velocity.y)
-          if (speed > cap) {
-            Body.setVelocity(b, {
-              x: (b.velocity.x / speed) * cap,
-              y: (b.velocity.y / speed) * cap,
-            })
-          }
-          if (Math.abs(b.angularVelocity) > MAX_SPIN) {
-            Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * MAX_SPIN)
-          }
-        }
+        for (const b of dynamic) limitBody(b)
       }
       if (steps === MAX_STEPS) accRef.current = 0
 
@@ -136,13 +177,13 @@ export function PhysicsJar({
             const el = clipRefs.current[b.clipId]
             if (!el) return
             if (b.zIndex !== i) { el.style.zIndex = i; b.zIndex = i }
-            const d   = Math.round(Math.max(0, Math.min(1, b.position.y / JAR_H)) * 20) / 20
+            const d   = Math.round(Math.max(0, Math.min(1, b.position.y / heightRef.current)) * 20) / 20
             const rot = Math.round(b.angle * 8) / 8
             const key = `${d}|${rot}`
             if (b.lightKey === key) return
             b.lightKey = key
             const off = 1 + d * 3.5  // screen-space drop, rotated into the clip's local frame
-            el.style.filter = `brightness(${(1.12 - d * 0.42).toFixed(2)})`
+            el.style.setProperty('--d', d)  // depth shading curve lives in App.css per theme
             el.style.setProperty('--sx', `${(off * Math.sin(rot)).toFixed(2)}px`)
             el.style.setProperty('--sy', `${(off * Math.cos(rot)).toFixed(2)}px`)
             el.style.setProperty('--sa', (0.22 + d * 0.33).toFixed(2))
@@ -183,11 +224,11 @@ export function PhysicsJar({
       }
     })
 
-    const floor = Bodies.rectangle(INNER_W/2, INNER_H + WALL/2, INNER_W + WALL*2, WALL, { isStatic: true, friction: 0.7, restitution: 0.05 })
+    const floor = Bodies.rectangle(INNER_W/2, innerH + WALL/2, INNER_W + WALL*2, WALL, { isStatic: true, friction: 0.7, restitution: 0.05 })
     // 45° chamfers approximating the rounded bottom corners
     const corner = (arcCx, dir) => {
       const px = arcCx - dir * CORNER_R * Math.SQRT1_2
-      const py = INNER_H - CORNER_R + CORNER_R * Math.SQRT1_2
+      const py = innerH - CORNER_R + CORNER_R * Math.SQRT1_2
       const S  = 60
       return Bodies.rectangle(px - dir * Math.SQRT1_2 * S/2, py + Math.SQRT1_2 * S/2, S, S,
         { isStatic: true, friction: 0.7, angle: Math.PI / 4 })
@@ -198,8 +239,8 @@ export function PhysicsJar({
 
     Composite.add(engine.world, [
       floor, cornerL, cornerR,
-      Bodies.rectangle(-WALL/2,         INNER_H/2, WALL, INNER_H*4, { isStatic: true, friction: 0.7 }),
-      Bodies.rectangle(INNER_W + WALL/2, INNER_H/2, WALL, INNER_H*4, { isStatic: true, friction: 0.7 }),
+      Bodies.rectangle(-WALL/2,         innerH/2, WALL, innerH*4, { isStatic: true, friction: 0.7 }),
+      Bodies.rectangle(INNER_W + WALL/2, innerH/2, WALL, innerH*4, { isStatic: true, friction: 0.7 }),
     ])
 
     startLoop()
@@ -245,6 +286,14 @@ export function PhysicsJar({
     const isBulkLoad = newClips.length > 3
     const pourMs     = Math.min(700, newClips.length * 9)
 
+    if (isBulkLoad && presettled) {
+      const bodies = newClips.map(clip => makeClipBody(clip, null, true))
+      bodies.forEach(b => { bodiesRef.current[b.clipId] = b })
+      presettle(engine, bodies)
+      startLoop()
+      return
+    }
+
     newClips.forEach((clip, i) => {
       const delay = isBulkLoad ? (i / newClips.length) * pourMs + Math.random() * 30 : 0
       const t = setTimeout(() => {
@@ -254,29 +303,7 @@ export function PhysicsJar({
         // Consume the stored drop position (cursor coords in jar-local space)
         const dropPos = dropPosRef?.current?.[clip.id]
         if (dropPos) delete dropPosRef.current[clip.id]
-        const intro = isBulkLoad && !dropPos
-
-        const body = Bodies.rectangle(
-          dropPos ? dropPos.x : 15 + Math.random() * (INNER_W - 30),
-          dropPos ? dropPos.y : -(CH / 2 + 4 + Math.random() * 40),
-          CW, CH,
-          {
-            friction:       0.6,
-            frictionAir:    intro ? INTRO_AIR : AIR,
-            restitution:    0.08,
-            density:        0.007,
-            angle:          (Math.random() - 0.5) * Math.PI,
-            sleepThreshold: 30,
-            chamfer:        { radius: 6 },
-          }
-        )
-        body.clipId    = clip.id
-        body.introFall = intro
-        body.introAge  = 0
-        Body.setVelocity(body, {
-          x: (Math.random() - 0.5) * (intro ? 1 : 2),
-          y: intro ? 1.5 : dropPos ? 0.5 : 0,
-        })
+        const body = makeClipBody(clip, dropPos, isBulkLoad && !dropPos)
         bodiesRef.current[clip.id] = body
         Composite.add(engine.world, body)
         startLoop()
@@ -284,7 +311,7 @@ export function PhysicsJar({
 
       pending.set(clip.id, t)
     })
-  }, [clips, startLoop, dropPosRef])
+  }, [clips, startLoop, dropPosRef, presettled])
 
   // ── Unfreeze body when drag ends (draggingClipId → null) ───────────────
   useEffect(() => {
@@ -400,7 +427,7 @@ export function PhysicsJar({
             }}
             onKeyDown={e => {
               if (e.key === 'Enter') e.target.blur()
-              if (e.key === 'Escape') { setLabelDraft(label); setEditingLabel(false) }
+              if (e.key === 'Escape') { e.preventDefault(); setLabelDraft(label); setEditingLabel(false) }
             }}
           />
         ) : (
@@ -417,7 +444,7 @@ export function PhysicsJar({
       <div
         className={`jar jar-${isDone ? 'done' : 'todo'}`}
         data-jar={isDone ? 'right' : 'left'}
-        style={{ width: JAR_W, height: JAR_H, position: 'relative', overflow: 'hidden', flexShrink: 0 }}
+        style={{ width: JAR_W, height, position: 'relative', overflow: 'hidden', flexShrink: 0 }}
         onPointerMove={handleJarPointerMove}
       >
         <div className="jar-sheen" />
@@ -463,9 +490,9 @@ export function ClipSVG({ color, scale = 1, shadow = false }) {
   return (
     <svg viewBox="0 0 12 28" width={w} height={h} overflow="visible" aria-hidden>
       {shadow && (
-        <g className="clip-shadow" fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round">
-          <path d={OUTER_PATH} strokeWidth="4.6" opacity="0.35" />
-          <path d={INNER_PATH} strokeWidth="4.6" opacity="0.35" />
+        <g className="clip-shadow" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path className="halo" d={OUTER_PATH} strokeWidth="4.6" />
+          <path className="halo" d={INNER_PATH} strokeWidth="4.6" />
           <path d={OUTER_PATH} strokeWidth="2.4" />
           <path d={INNER_PATH} strokeWidth="2.4" />
         </g>
